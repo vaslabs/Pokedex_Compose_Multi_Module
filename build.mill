@@ -1,15 +1,14 @@
 //| mill-version: 1.0.2
 package build
 
+import coursier.core.VariantSelector.VariantMatcher
 import coursier.params.ResolutionParams
-import coursier.util.ModuleMatchers
-import coursier.version.ConstraintReconciliation
 import coursier.{MavenRepository, Repository}
 import mill.*
 import mill.androidlib.*
 import mill.androidlib.hilt.AndroidHiltSupport
-import mill.api.{ModuleRef, Task}
-import mill.javalib.JavaModule
+import mill.api.{ModuleRef, PathRef, Task}
+import mill.javalib.{CoursierModule, JavaModule}
 import mill.kotlinlib.*
 
 object androidSdkModule0 extends AndroidSdkModule {
@@ -55,13 +54,20 @@ object network extends AndroidHiltLib {
 
 object compose_ui extends AndroidHiltCompose {
   override def moduleDeps: Seq[JavaModule] = super.moduleDeps ++ Seq(network)
+  def kotlinLanguageVersion = Versions.kotlinLanguageVersion
 
   override def repositoriesTask: Task[Seq[Repository]] = Task.Anon {
     super.repositoriesTask() ++
       Seq(MavenRepository.apply("https://jitpack.io"))
   }
 
+  override def kspKotlincOptions: T[Seq[String]] = super.kspKotlincOptions() ++ Seq(
+    "-Xannotation-default-target=param-property"
+  )
+
   override def androidNamespace: String = "com.nicos.compose_ui"
+
+  override def kotlinSymbolProcessors: T[Seq[Dep]] = super.kotlinSymbolProcessors()
 
   override def bomMvnDeps: T[Seq[Dep]] = Seq(
     mvn"androidx.compose:compose-bom:2025.07.00"
@@ -74,7 +80,6 @@ object compose_ui extends AndroidHiltCompose {
     mvn"androidx.swiperefreshlayout:swiperefreshlayout:1.1.0",
     mvn"androidx.lifecycle:lifecycle-runtime-ktx:2.9.2",
     mvn"androidx.lifecycle:lifecycle-runtime:2.9.2",
-    mvn"androidx.arch.core:core-common:2.2.0",
     mvn"androidx.arch.core:core-runtime:2.2.0",
 
     mvn"androidx.compose.runtime:runtime:1.8.3",
@@ -109,6 +114,8 @@ object compose_ui extends AndroidHiltCompose {
     mvn"androidx.compose.ui:ui-test-manifest"
 
   )
+
+
 }
 
 object navigation extends AndroidCompose {
@@ -186,6 +193,9 @@ trait AndroidKotlinLib extends AndroidKotlinModule {
     true
   }
 
+  override def compileClasspath: T[Seq[PathRef]] = super.compileClasspath() ++
+    androidSdkModule().androidLibsClasspaths()
+
   def androidCompiledModuleResources = Task {
 
     val moduleResources =
@@ -216,6 +226,8 @@ trait AndroidKotlinLib extends AndroidKotlinModule {
 
 trait AndroidCompose extends AndroidKotlinLib {
 
+  override def kotlinUseEmbeddableCompiler: Task[Boolean] = Task { true }
+
   override def androidEnableCompose: T[Boolean] = Task {
     true
   }
@@ -225,23 +237,45 @@ trait AndroidCompose extends AndroidKotlinLib {
 trait AndroidHiltLib extends AndroidKotlinLib with AndroidHiltSupport {
   override def kspVersion: T[String] = Versions.kspVersion
 
-  def kotlinSymbolProcessors: T[Seq[Dep]] = super.kotlinSymbolProcessors() ++ Seq(
+  def localResolver = Task.Anon {
+    new CoursierModule.Resolver(
+      repositories = repositoriesTask(),
+      bind = bindDependency(),
+      mapDependencies = Some(mapDependencies()),
+      customizer = resolutionCustomizer(),
+      coursierCacheCustomizer = coursierCacheCustomizer(),
+      resolutionParams = resolutionParams(),
+      offline = Task.offline,
+      checkGradleModules = false
+    )
+  }
+
+  def kotlinSymbolProcessors: T[Seq[Dep]] = super[AndroidHiltSupport].kotlinSymbolProcessors() ++ Seq(
     mvn"com.google.dagger:hilt-android-compiler:2.57",
-    mvn"com.google.dagger:hilt-compiler:2.57",
     mvn"androidx.hilt:hilt-compiler:1.2.0"
   )
 
+  override def kotlinSymbolProcessorsResolved: T[Seq[PathRef]] = Task {
+    localResolver().classpath(
+      kotlinSymbolProcessors()
+    )
+  }
   override def mvnDeps: T[Seq[Dep]] = super.mvnDeps() ++ Seq(
     mvn"com.google.dagger:hilt-android:2.57"
   )
 
-  override def kspClasspath: T[Seq[PathRef]] = super.kspClasspath() ++ androidSdkModule().androidLibsClasspaths()
-
-  override def compileClasspath: T[Seq[PathRef]] =
-    super.compileClasspath() ++ androidSdkModule().androidLibsClasspaths()
 }
 
-trait AndroidHiltCompose extends AndroidHiltLib {
+trait AndroidHiltCompose extends AndroidHiltLib with AndroidCompose {
+
+  override def resolutionParams: Task[ResolutionParams] = Task.Anon {
+    super.resolutionParams().addVariantAttributes(
+      "org.gradle.plugin.api-version" ->  VariantMatcher.AnyOf(Seq(
+        VariantMatcher.Equals("8.13")
+      )
+    ))
+  }
+
   override def mvnDeps: T[Seq[Dep]] = super.mvnDeps() ++ Seq(
       mvn"androidx.hilt:hilt-navigation-compose:1.2.0",
   )
