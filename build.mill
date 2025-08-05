@@ -5,14 +5,14 @@ import mill.*
 import androidlib.*
 import kotlinlib.*
 import hilt.AndroidHiltSupport
-import mill.api.ModuleRef
+import mill.api.{ModuleRef, Task}
 import mill.javalib.JavaModule
 
 object androidSdkModule0 extends AndroidSdkModule {
   def buildToolsVersion = "36.0.0"
 }
 
-object database extends AndroidHiltCompose {
+object database extends AndroidHiltLib {
   override def androidNamespace: String = "com.nicos.database"
 
   override def mvnDeps: T[Seq[Dep]] = super.mvnDeps() ++ Seq(
@@ -31,8 +31,22 @@ object database extends AndroidHiltCompose {
   )
 }
 
-object network extends AndroidKotlinLib {
+object network extends AndroidHiltLib {
   override def androidNamespace: String = "com.nicos.network"
+
+  override def moduleDeps: Seq[JavaModule] = super.moduleDeps ++ Seq(database)
+
+  override def mvnDeps: T[Seq[Dep]] = super.mvnDeps() ++ Seq(
+    mvn"androidx.core:core-ktx:1.16.0",
+    mvn"androidx.appcompat:appcompat:1.7.1",
+    mvn"com.squareup.retrofit2:retrofit:3.0.0",
+    mvn"com.squareup.retrofit2:converter-gson:3.0.0",
+    mvn"com.squareup.okhttp3:okhttp:5.1.0",
+    mvn"com.google.code.gson:gson:2.13.1",
+    mvn"org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2",
+    mvn"org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2",
+    mvn"com.google.android.material:material:1.12.0"
+  )
 }
 
 object compose_ui extends AndroidHiltCompose {
@@ -157,6 +171,33 @@ trait AndroidKotlinLib extends AndroidKotlinModule {
   override def kotlinUseEmbeddableCompiler: Task[Boolean] = Task {
     true
   }
+
+  def androidCompiledModuleResources = Task {
+
+    val moduleResources =
+      androidResources().map(_.path).filter(os.exists) ++
+        androidTransitiveResources().map(_.path).filter(os.exists)
+
+    val aapt2Compile = Seq(androidSdkModule().aapt2Path().path.toString(), "compile")
+
+    for (libResDir <- moduleResources) {
+      val segmentsSeq = libResDir.segments.toSeq
+      val libraryName = segmentsSeq.dropRight(3).last
+      val dirDest = Task.dest / libraryName
+      os.makeDir(dirDest)
+      val aapt2Args = Seq(
+        "--dir",
+        libResDir.toString,
+        "-o",
+        dirDest.toString
+      )
+
+      os.call(aapt2Compile ++ aapt2Args)
+    }
+
+    PathRef(Task.dest)
+
+  }
 }
 
 trait AndroidCompose extends AndroidKotlinLib {
@@ -168,6 +209,8 @@ trait AndroidCompose extends AndroidKotlinLib {
 }
 
 trait AndroidHiltLib extends AndroidKotlinLib with AndroidHiltSupport {
+  override def kspVersion: T[String] = Versions.kspVersion
+
   def kotlinSymbolProcessors: T[Seq[Dep]] = super.kotlinSymbolProcessors() ++ Seq(
     mvn"com.google.dagger:hilt-android-compiler:2.57",
     mvn"com.google.dagger:hilt-compiler:2.57",
@@ -180,12 +223,11 @@ trait AndroidHiltLib extends AndroidKotlinLib with AndroidHiltSupport {
 
   override def kspClasspath: T[Seq[PathRef]] = super.kspClasspath() ++ androidSdkModule().androidLibsClasspaths()
 
-  override def compileClasspath: T[Seq[PathRef]] = 
+  override def compileClasspath: T[Seq[PathRef]] =
     super.compileClasspath() ++ androidSdkModule().androidLibsClasspaths()
 }
 
 trait AndroidHiltCompose extends AndroidHiltLib {
-  override def kspVersion: T[String] = Versions.kspVersion
 }
 
 object Versions {
