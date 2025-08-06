@@ -123,14 +123,16 @@ object navigation extends AndroidCompose {
 object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompose {
 
   // FIXME known issue
-  override def androidR8Args = Seq("--map-diagnostics", "error", "warning")
+  def androidR8Args = Seq("--map-diagnostics", "error", "warning")
 
-  // FIXME Workaround to duplicated R files
+  // FIXME Workaround for duplicated R files
   override def compileClasspath: T[Seq[PathRef]] = Task {
     (androidOriginalCompileClasspath().filter(_.path.ext != "aar") ++ androidResolvedMvnDeps()).map(
       _.path
     ).distinct.map(PathRef(_)) ++ Seq(androidProcessedResources()) // <- Workaround is usage of [[androidProcessedResources]]
   }
+
+  override def androidPackagedDeps: T[Seq[PathRef]] = super.androidPackagedDeps() ++ Seq(androidProcessedResources())
 
   override def moduleDeps: Seq[JavaModule] = super.moduleDeps ++ Seq(navigation)
 
@@ -138,7 +140,7 @@ object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompos
     "--no-version-vectors"
   )
 
-  override def androidDebugSettings: T[AndroidBuildTypeSettings] = Task {
+  def androidDebugSettings: T[AndroidBuildTypeSettings] = Task {
     AndroidBuildTypeSettings(
       isMinifyEnabled = false,
       isShrinkEnabled = false
@@ -171,6 +173,12 @@ object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompos
     mvn"androidx.vectordrawable:vectordrawable:1.2.0",
     mvn"androidx.vectordrawable:vectordrawable-animated:1.2.0"
   )
+
+  override def androidMergeableManifests: Task[Seq[PathRef]] = Task {
+    val debugManifest = Seq(androidDebugManifestLocation()).filter(pr => os.exists(pr.path))
+    val libManifests = androidUnpackRunArchives().flatMap(_.manifest)
+    debugManifest ++ libManifests
+  }
 
 
 }
