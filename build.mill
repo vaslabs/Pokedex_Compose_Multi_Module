@@ -190,13 +190,6 @@ object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompos
     mvn"androidx.vectordrawable:vectordrawable-animated:1.2.0"
   )
 
-  override def androidMergeableManifests: Task[Seq[PathRef]] = Task {
-    val debugManifest = Seq(androidDebugManifestLocation()).filter(pr => os.exists(pr.path))
-    val libManifests = androidUnpackRunArchives().flatMap(_.manifest)
-    debugManifest ++ libManifests
-  }
-
-
 }
 
 trait AndroidKotlinLib extends AndroidKotlinModule {
@@ -334,6 +327,7 @@ trait AndroidHiltLib extends AndroidKotlinLib with AndroidHiltSupport {
   override def kspVersion: T[String] = Versions.kspVersion
   override def kotlinLanguageVersion: T[String] = Versions.kotlinLanguageVersion
 
+  // FIXME workaround for using it in resolving compiler classpaths
   def androidHiltProcessorPath: T[Seq[PathRef]] = Task {
     localResolver().classpath(
       kotlinSymbolProcessors()
@@ -346,6 +340,7 @@ trait AndroidHiltLib extends AndroidKotlinLib with AndroidHiltSupport {
     mvn"com.google.dagger:hilt-compiler:2.57",
   )
 
+  // FIXME workaround for using it in resolving compiler classpaths
   override def kotlinSymbolProcessorsResolved: T[Seq[PathRef]] = Task {
     localResolver().classpath(
       kotlinSymbolProcessors()
