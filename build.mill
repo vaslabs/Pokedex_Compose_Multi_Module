@@ -1,6 +1,7 @@
 //| mill-version: 1.0.2
 package build
 
+import build.database.kotlinVersion
 import coursier.params.ResolutionParams
 import coursier.{MavenRepository, Repository}
 import mill.*
@@ -118,6 +119,20 @@ object navigation extends AndroidCompose {
     mvn"androidx.navigation:navigation-compose:2.9.3",
     mvn"org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0"
   )
+
+  override def kotlincPluginMvnDeps: T[Seq[Dep]] = super.kotlincPluginMvnDeps() ++ Seq(
+    mvn"org.jetbrains.kotlin:kotlin-serialization-compiler-plugin:${kotlinVersion()}"
+  )
+
+  // FIXME workaround - default resolver needs to change to not conflict with android dep resolution
+  override def kotlincPluginJars: T[Seq[PathRef]] = Task {
+    val jars = localResolver().classpath(
+      kotlincPluginMvnDeps()
+        // Don't resolve transitive jars
+        .map(d => d.exclude("*" -> "*")),
+    )
+    jars
+  }
 }
 
 object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompose {
@@ -132,6 +147,7 @@ object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompos
     ).distinct.map(PathRef(_)) ++ Seq(androidProcessedResources()) // <- Workaround is usage of [[androidProcessedResources]]
   }
 
+  // FIXME Workaround for duplicated R files
   override def androidPackagedDeps: T[Seq[PathRef]] = super.androidPackagedDeps() ++ Seq(androidProcessedResources())
 
   override def moduleDeps: Seq[JavaModule] = super.moduleDeps ++ Seq(navigation)
@@ -184,6 +200,21 @@ object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompos
 }
 
 trait AndroidKotlinLib extends AndroidKotlinModule {
+
+  // FIXME workaround for using it in resolving compiler classpaths
+  def localResolver = Task.Anon {
+    new CoursierModule.Resolver(
+      repositories = repositoriesTask(),
+      bind = bindDependency(),
+      mapDependencies = Some(mapDependencies()),
+      customizer = resolutionCustomizer(),
+      coursierCacheCustomizer = coursierCacheCustomizer(),
+      resolutionParams = resolutionParams(),
+      offline = Task.offline,
+      checkGradleModules = false
+    )
+  }
+
   override def androidMinSdk: T[Int] = Task { Versions.androidMinSdk }
 
   override def androidCompileSdk: T[Int] = Task { Versions.androidCompileSdk }
@@ -302,19 +333,6 @@ trait AndroidCompose extends AndroidKotlinLib {
 trait AndroidHiltLib extends AndroidKotlinLib with AndroidHiltSupport {
   override def kspVersion: T[String] = Versions.kspVersion
   override def kotlinLanguageVersion: T[String] = Versions.kotlinLanguageVersion
-
-  def localResolver = Task.Anon {
-    new CoursierModule.Resolver(
-      repositories = repositoriesTask(),
-      bind = bindDependency(),
-      mapDependencies = Some(mapDependencies()),
-      customizer = resolutionCustomizer(),
-      coursierCacheCustomizer = coursierCacheCustomizer(),
-      resolutionParams = resolutionParams(),
-      offline = Task.offline,
-      checkGradleModules = false
-    )
-  }
 
   def androidHiltProcessorPath: T[Seq[PathRef]] = Task {
     localResolver().classpath(
