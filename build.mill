@@ -1,7 +1,6 @@
 //| mill-version: 1.0.2
 package build
 
-import coursier.core.VariantSelector.VariantMatcher
 import coursier.params.ResolutionParams
 import coursier.{MavenRepository, Repository}
 import mill.*
@@ -10,7 +9,10 @@ import mill.androidlib.hilt.AndroidHiltSupport
 import mill.api.{ModuleRef, PathRef, Task}
 import mill.javalib.{CoursierModule, JavaModule}
 import mill.kotlinlib.*
+import mill.kotlinlib.ksp.GeneratedKSPSources
+import mill.kotlinlib.worker.api.KotlinWorkerTarget
 
+import java.io.File
 object androidSdkModule0 extends AndroidSdkModule {
   def buildToolsVersion = "36.0.0"
 }
@@ -127,17 +129,6 @@ object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompos
   // FIXME known issue
   override def androidR8Args = Seq("--map-diagnostics", "error", "warning")
 
-  // FIXME Workaround to building hilt in isolation
-  override def kspPluginParameters: T[Seq[String]] = Task {
-    super.kspPluginParameters() ++
-      Seq(
-        s"apoption=dagger.fastInit=enabled",
-        s"apoption=dagger.hilt.android.internal.disableAndroidSuperclassValidation=true",
-        s"apoption=dagger.hilt.android.internal.projectType=APP",
-        s"apoption=dagger.hilt.internal.useAggregatingRootProcessor=false"
-      )
-  }
-
   // FIXME Workaround to duplicated R files
   override def compileClasspath: T[Seq[PathRef]] = Task {
     (androidOriginalCompileClasspath().filter(_.path.ext != "aar") ++ androidResolvedMvnDeps()).map(
@@ -147,14 +138,11 @@ object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompos
 
   override def moduleDeps: Seq[JavaModule] = super.moduleDeps ++ Seq(navigation)
 
-  def kotlinVersion = Versions.kotlinVersion
-  def kotlinLanguageVersion = Versions.kotlinLanguageVersion
-  def kspVersion = Versions.kspVersion
 
   override def androidDebugSettings: T[AndroidBuildTypeSettings] = Task {
     AndroidBuildTypeSettings(
-      isMinifyEnabled = true,
-      isShrinkEnabled = true
+      isMinifyEnabled = false,
+      isShrinkEnabled = false
     ).withDefaultProguardFile("proguard-android-optimize.txt")
       .withProguardLocalFiles(
         Seq(
@@ -167,6 +155,14 @@ object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompos
   def androidApplicationId = "com.nicos.pokedex_compose_multi_module"
 
   def androidSdkModule = mill.api.ModuleRef(androidSdkModule0)
+
+  override def kspPluginParameters: T[Seq[String]] = super.kspPluginParameters() ++
+      Seq(
+        s"apoption=dagger.fastInit=enabled",
+        s"apoption=dagger.hilt.android.internal.disableAndroidSuperclassValidation=true",
+        s"apoption=dagger.hilt.android.internal.projectType=APP",
+        s"apoption=dagger.hilt.internal.useAggregatingRootProcessor=true"
+      )
 
   def androidCompileSdk = Versions.androidCompileSdk
 
@@ -244,6 +240,17 @@ trait AndroidCompose extends AndroidKotlinLib {
 
 trait AndroidHiltLib extends AndroidKotlinLib with AndroidHiltSupport {
   override def kspVersion: T[String] = Versions.kspVersion
+  override def kotlinLanguageVersion: T[String] = Versions.kotlinLanguageVersion
+  def kotlinVersion = Versions.kotlinVersion
+
+  override def kspPluginParameters: T[Seq[String]] = Task {
+      Seq(
+        s"apoption=dagger.fastInit=enabled",
+        s"apoption=dagger.hilt.android.internal.disableAndroidSuperclassValidation=true",
+        s"apoption=dagger.hilt.android.internal.projectType=LIBRARY",
+        s"apoption=dagger.hilt.internal.useAggregatingRootProcessor=false"
+      )
+  }
 
   def localResolver = Task.Anon {
     new CoursierModule.Resolver(
