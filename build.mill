@@ -53,7 +53,6 @@ object network extends AndroidHiltLib {
 
 object compose_ui extends AndroidHiltCompose {
   override def moduleDeps: Seq[JavaModule] = super.moduleDeps ++ Seq(network)
-  def kotlinLanguageVersion = Versions.kotlinLanguageVersion
 
   override def repositoriesTask: Task[Seq[Repository]] = Task.Anon {
     super.repositoriesTask() ++
@@ -229,19 +228,12 @@ trait AndroidKotlinLib extends AndroidKotlinModule {
 }
 
 trait AndroidCompose extends AndroidKotlinLib {
-
-  override def kotlinUseEmbeddableCompiler: Task[Boolean] = Task { true }
-
-  override def androidEnableCompose: T[Boolean] = Task {
-    true
-  }
-
+  override def androidEnableCompose: T[Boolean] = Task { true }
 }
 
 trait AndroidHiltLib extends AndroidKotlinLib with AndroidHiltSupport {
   override def kspVersion: T[String] = Versions.kspVersion
   override def kotlinLanguageVersion: T[String] = Versions.kotlinLanguageVersion
-  def kotlinVersion = Versions.kotlinVersion
 
   override def kspPluginParameters: T[Seq[String]] = Task {
       Seq(
