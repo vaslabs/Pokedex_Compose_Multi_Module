@@ -1,13 +1,12 @@
 //| mill-version: 1.0.2
 package build
 
-import build.database.kotlinVersion
 import coursier.params.ResolutionParams
 import coursier.{MavenRepository, Repository}
 import mill.*
 import mill.androidlib.*
 import mill.androidlib.hilt.AndroidHiltSupport
-import mill.api.{BuildCtx, ModuleRef, PathRef, Task}
+import mill.api.{ModuleRef, PathRef, Task}
 import mill.javalib.{CoursierModule, JavaModule}
 import mill.kotlinlib.*
 
@@ -124,7 +123,7 @@ object navigation extends AndroidCompose {
     mvn"org.jetbrains.kotlin:kotlin-serialization-compiler-plugin:${kotlinVersion()}"
   )
 
-  // FIXME workaround - default resolver needs to change to not conflict with android dep resolution
+  // FIXME workaround for using it in resolving compiler classpaths
   override def kotlincPluginJars: T[Seq[PathRef]] = Task {
     val jars = localResolver().classpath(
       kotlincPluginMvnDeps()
@@ -156,6 +155,7 @@ object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompos
     "--no-version-vectors"
   )
 
+  // FIXME proguard needs investigation
   def androidDebugSettings: T[AndroidBuildTypeSettings] = Task {
     AndroidBuildTypeSettings(
       isMinifyEnabled = false,
