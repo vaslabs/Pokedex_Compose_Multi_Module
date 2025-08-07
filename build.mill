@@ -1,4 +1,3 @@
-//| mill-version: 1.0.2
 package build
 
 import coursier.params.ResolutionParams
@@ -139,27 +138,59 @@ object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompos
   // FIXME known issue
   def androidR8Args = Seq("--map-diagnostics", "error", "warning")
 
-  // FIXME Workaround for duplicated R files
-  override def compileClasspath: T[Seq[PathRef]] = Task {
-    (androidOriginalCompileClasspath().filter(_.path.ext != "aar") ++ androidResolvedMvnDeps()).map(
-      _.path
-    ).distinct.map(PathRef(_)) ++ Seq(androidProcessedResources()) // <- Workaround is usage of [[androidProcessedResources]]
-  }
-
-  // FIXME Workaround for duplicated R files
-  override def androidPackagedDeps: T[Seq[PathRef]] = super.androidPackagedDeps() ++ Seq(androidProcessedResources())
-
   override def moduleDeps: Seq[JavaModule] = super.moduleDeps ++ Seq(navigation)
 
   override def androidAaptOptions: T[Seq[String]] = super.androidAaptOptions() ++ Seq(
     "--no-version-vectors"
   )
 
+  override def androidProguard: T[PathRef] = Task {
+    val proguard = super.androidProguard()
+
+    val hiltContent: String =
+      """
+        |# Hilt generated Application, Activities, Fragments
+        |-keep class dagger.hilt.internal.GeneratedApplication { *; }
+        |-keep class * extends android.app.Application
+        |-keep class * extends dagger.hilt.android.internal.lifecycle.HiltViewModelFactory
+        |-keep class dagger.hilt.internal.aggregatedroot.codegen.** { *; }
+        |-keep class dagger.hilt.android.internal.managers.** { *; }
+        |-keep class dagger.hilt.android.components.** { *; }
+        |-keep class dagger.hilt.internal.components.** { *; }
+        |-keep class dagger.hilt.internal.GeneratedComponent { *; }
+        |-keep class **_HiltModules_* { *; }
+        |
+        |# Keep any class annotated with @HiltAndroidApp, @AndroidEntryPoint, etc.
+        |-keep @dagger.hilt.android.HiltAndroidApp class * { *; }
+        |-keep @dagger.hilt.android.AndroidEntryPoint class * { *; }
+        |-keep @dagger.hilt.InstallIn class * { *; }
+        |-keep @dagger.hilt.components.SingletonComponent class * { *; }
+        |
+        |# Keep any Hilt-generated code related to entry points and components
+        |-keep class * extends dagger.hilt.android.internal.lifecycle.HiltViewModelFactory$HiltViewModelFactoryModule { *; }
+        |
+        |# Prevent R8 from stripping this required class and its constructor
+        |-keep class androidx.startup.InitializationProvider { <init>(); }
+        |# If other Initializer components are used (like Hilt or WorkManager)
+        |-keep class androidx.startup.Initializer { *; }
+        |-keepclassmembers class * {
+        |    public <init>();
+        |}
+        |
+          """.stripMargin
+    
+      
+    val globalProguard = Task.dest / "global-proguard.txt"
+    os.write(globalProguard, os.read(proguard.path))
+    os.write.append(globalProguard, hiltContent)
+    PathRef(globalProguard)
+  }
+
   // FIXME proguard needs investigation
   def androidDebugSettings: T[AndroidBuildTypeSettings] = Task {
     AndroidBuildTypeSettings(
-      isMinifyEnabled = false,
-      isShrinkEnabled = false
+      isMinifyEnabled = true,
+      isShrinkEnabled = true
     ).withDefaultProguardFile("proguard-android-optimize.txt")
       .withProguardLocalFiles(
         Seq(
@@ -224,99 +255,6 @@ trait AndroidKotlinLib extends AndroidKotlinModule {
     "17"
   )
 
-  override def compileClasspath: T[Seq[PathRef]] = super.compileClasspath() ++
-    androidSdkModule().androidLibsClasspaths()
-
-  // TODO upcoming fixes by @souvlakias
-  def androidTransitiveCompiledResources: T[Seq[PathRef]] = Task {
-    Task.traverse(transitiveModuleCompileModuleDeps) {
-      case m: AndroidKotlinLib =>
-        Task.Anon(m.androidCompiledModuleResources0())
-      case _ =>
-        Task.Anon(Seq.empty)
-    }().flatten.distinct
-  }
-
-  // TODO upcoming fixes by @souvlakias
-  def androidCompiledModuleResources0: T[Seq[PathRef]] = Task {
-
-    val moduleResources: Seq[os.Path] =
-      androidResources().map(_.path).filter(os.exists)
-
-    val aapt2Compile = Seq(androidSdkModule().aapt2Path().path.toString(), "compile")
-
-    for (libResDir <- moduleResources) {
-      val segmentsSeq = libResDir.segments.toSeq
-      val libraryName = segmentsSeq.dropRight(1).last
-      val dirDest = Task.dest / libraryName
-      os.makeDir(dirDest)
-      val aapt2Args = Seq(
-        "--dir",
-        libResDir.toString,
-        "-o",
-        dirDest.toString
-      )
-
-      os.call(aapt2Compile ++ aapt2Args)
-    }
-    androidTransitiveCompiledResources() ++ Seq(PathRef(Task.dest))
-  }
-
-  // TODO upcoming fixes by @souvlakias
-  def androidLinkedResources: T[PathRef] = Task {
-    val compiledLibResDir = androidCompiledLibResources().path
-    val moduleResDirs = androidCompiledModuleResources0()
-      .map(_.path)
-
-    val filesToLink = os.walk(compiledLibResDir).filter(os.isFile(_)) ++
-      moduleResDirs.flatMap(os.walk(_).filter(os.isFile(_)))
-
-    val javaRClassDir = Task.dest / "generatedSources/java"
-    val apkDir = Task.dest / "apk"
-    val proguard = Task.dest / "proguard"
-
-    os.makeDir.all(javaRClassDir)
-    os.makeDir.all(proguard)
-    os.makeDir(apkDir)
-
-    val resApkFile = apkDir / "res.apk"
-
-    val mainDexRulesProFile = proguard / "main-dex-rules.pro"
-
-    val aapt2Link = Seq(androidSdkModule().aapt2Path().path.toString(), "link")
-
-    val linkArgs = Seq(
-      "-I",
-      androidSdkModule().androidJarPath().path.toString,
-      "--manifest",
-      androidMergedManifest().path.toString,
-      "--custom-package",
-      androidNamespace,
-      "--java",
-      javaRClassDir.toString,
-      "--min-sdk-version",
-      androidMinSdk().toString,
-      "--target-sdk-version",
-      androidTargetSdk().toString,
-      "--version-code",
-      androidVersionCode().toString,
-      "--version-name",
-      androidVersionName(),
-      "--proguard-main-dex",
-      mainDexRulesProFile.toString,
-      "--proguard-conditional-keep-rules"
-    ) ++ androidAaptOptions() ++ Seq(
-      "-o",
-      resApkFile.toString
-    ) ++ filesToLink.flatMap(flat => Seq("-R", flat.toString()))
-
-    Task.log.info((aapt2Link ++ linkArgs).mkString(" "))
-
-    os.call(aapt2Link ++ linkArgs)
-
-    PathRef(Task.dest)
-  }
-
 }
 
 trait AndroidCompose extends AndroidKotlinLib {
@@ -333,7 +271,7 @@ trait AndroidHiltLib extends AndroidKotlinLib with AndroidHiltSupport {
       kotlinSymbolProcessors()
     )
   }
-
+  
   def kotlinSymbolProcessors: T[Seq[Dep]] = super[AndroidHiltSupport].kotlinSymbolProcessors() ++ Seq(
     mvn"com.google.dagger:hilt-android-compiler:2.57",
     mvn"androidx.hilt:hilt-compiler:1.2.0",
