@@ -144,6 +144,38 @@ object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompos
     "--no-version-vectors"
   )
 
+  // FIXME workaround -> this should go to AndroidAppModule
+  def providerProguardConfigRules: T[Seq[String]] = Task {
+    val androidNs = "http://schemas.android.com/apk/res/android"
+    val manifest = androidMergedManifest().path
+    val manifestXML = scala.xml.XML.loadFile(manifest.toString)
+
+    val providerElements = (manifestXML \\ "application" \\ "provider")
+
+    // Collect provider class names
+    val providerClasses = providerElements.flatMap { provider =>
+      provider.attribute(androidNs, "name").map(_.text.trim)
+    }
+
+    // Collect meta-data android:name values under each provider
+    val metaDataClasses = providerElements.flatMap { provider =>
+      (provider \ "meta-data").flatMap { meta =>
+        meta.attribute(androidNs, "name").map(_.text.trim)
+      }
+    }
+
+    // Union of both sets, deduplicated
+    val allClasses = (providerClasses ++ metaDataClasses).distinct
+
+    // Generate ProGuard rules
+    val rules = allClasses.map { className =>
+      s"-keep class $className { <init>(); }"
+    }
+
+    rules
+  }
+
+  //FIXME workaround this should go to AndroidHiltSupport
   override def androidProguard: T[PathRef] = Task {
     val proguard = super.androidProguard()
 
@@ -168,25 +200,16 @@ object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompos
         |
         |# Keep any Hilt-generated code related to entry points and components
         |-keep class * extends dagger.hilt.android.internal.lifecycle.HiltViewModelFactory$HiltViewModelFactoryModule { *; }
-        |
-        |# Prevent R8 from stripping this required class and its constructor
-        |-keep class androidx.startup.InitializationProvider { <init>(); }
-        |# If other Initializer components are used (like Hilt or WorkManager)
-        |-keep class androidx.startup.Initializer { *; }
-        |-keepclassmembers class * {
-        |    public <init>();
-        |}
-        |
-          """.stripMargin
-    
-      
+        |""".stripMargin
+
+
     val globalProguard = Task.dest / "global-proguard.txt"
     os.write(globalProguard, os.read(proguard.path))
     os.write.append(globalProguard, hiltContent)
+    os.write.append(globalProguard, providerProguardConfigRules().mkString("\n"))
     PathRef(globalProguard)
   }
 
-  // FIXME proguard needs investigation
   def androidDebugSettings: T[AndroidBuildTypeSettings] = Task {
     AndroidBuildTypeSettings(
       isMinifyEnabled = true,
@@ -271,7 +294,7 @@ trait AndroidHiltLib extends AndroidKotlinLib with AndroidHiltSupport {
       kotlinSymbolProcessors()
     )
   }
-  
+
   def kotlinSymbolProcessors: T[Seq[Dep]] = super[AndroidHiltSupport].kotlinSymbolProcessors() ++ Seq(
     mvn"com.google.dagger:hilt-android-compiler:2.57",
     mvn"androidx.hilt:hilt-compiler:1.2.0",
