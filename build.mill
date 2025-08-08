@@ -165,11 +165,6 @@ object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompos
         |# Keep any class annotated with @HiltAndroidApp, @AndroidEntryPoint, etc.
         |-keep @dagger.hilt.android.HiltAndroidApp class * { *; }
         |-keep @dagger.hilt.android.AndroidEntryPoint class * { *; }
-        |-keep @dagger.hilt.InstallIn class * { *; }
-        |-keep @dagger.hilt.components.SingletonComponent class * { *; }
-        |
-        |# Keep any Hilt-generated code related to entry points and components
-        |-keep class * extends dagger.hilt.android.internal.lifecycle.HiltViewModelFactory$HiltViewModelFactoryModule { *; }
         |""".stripMargin
 
     val globalProguard = Task.dest / "global-proguard.txt"
