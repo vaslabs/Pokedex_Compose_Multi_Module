@@ -115,15 +115,6 @@ object navigation extends AndroidCompose {
     mvn"org.jetbrains.kotlin:kotlin-serialization-compiler-plugin:${kotlinVersion()}"
   )
 
-  // FIXME workaround for using it in resolving compiler classpaths
-  override def kotlincPluginJars: T[Seq[PathRef]] = Task {
-    val jars = localResolver().classpath(
-      kotlincPluginMvnDeps()
-        // Don't resolve transitive jars
-        .map(d => d.exclude("*" -> "*")),
-    )
-    jars
-  }
 }
 
 object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompose {
@@ -171,17 +162,6 @@ object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompos
 
     val hiltContent: String =
       """
-        |# Hilt generated Application, Activities, Fragments
-        |-keep class dagger.hilt.internal.GeneratedApplication { *; }
-        |-keep class * extends android.app.Application
-        |-keep class * extends dagger.hilt.android.internal.lifecycle.HiltViewModelFactory
-        |-keep class dagger.hilt.internal.aggregatedroot.codegen.** { *; }
-        |-keep class dagger.hilt.android.internal.managers.** { *; }
-        |-keep class dagger.hilt.android.components.** { *; }
-        |-keep class dagger.hilt.internal.components.** { *; }
-        |-keep class dagger.hilt.internal.GeneratedComponent { *; }
-        |-keep class **_HiltModules_* { *; }
-        |
         |# Keep any class annotated with @HiltAndroidApp, @AndroidEntryPoint, etc.
         |-keep @dagger.hilt.android.HiltAndroidApp class * { *; }
         |-keep @dagger.hilt.android.AndroidEntryPoint class * { *; }
@@ -191,7 +171,6 @@ object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompos
         |# Keep any Hilt-generated code related to entry points and components
         |-keep class * extends dagger.hilt.android.internal.lifecycle.HiltViewModelFactory$HiltViewModelFactoryModule { *; }
         |""".stripMargin
-
 
     val globalProguard = Task.dest / "global-proguard.txt"
     os.write(globalProguard, os.read(proguard.path))
@@ -234,20 +213,6 @@ object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompos
 
 trait AndroidKotlinLib extends AndroidKotlinModule {
 
-  // FIXME workaround for using it in resolving compiler classpaths
-  def localResolver = Task.Anon {
-    new CoursierModule.Resolver(
-      repositories = repositoriesTask(),
-      bind = bindDependency(),
-      mapDependencies = Some(mapDependencies()),
-      customizer = resolutionCustomizer(),
-      coursierCacheCustomizer = coursierCacheCustomizer(),
-      resolutionParams = resolutionParams(),
-      offline = Task.offline,
-      checkGradleModules = false
-    )
-  }
-
   override def androidMinSdk: T[Int] = Task { Versions.androidMinSdk }
 
   override def androidCompileSdk: T[Int] = Task { Versions.androidCompileSdk }
@@ -274,25 +239,12 @@ trait AndroidHiltLib extends AndroidKotlinLib with AndroidHiltSupport {
   override def kspVersion: T[String] = Versions.kspVersion
   override def kotlinLanguageVersion: T[String] = Versions.kotlinLanguageVersion
 
-  // FIXME workaround for using it in resolving compiler classpaths
-  def androidHiltProcessorPath: T[Seq[PathRef]] = Task {
-    localResolver().classpath(
-      kotlinSymbolProcessors()
-    )
-  }
-
   def kotlinSymbolProcessors: T[Seq[Dep]] = super[AndroidHiltSupport].kotlinSymbolProcessors() ++ Seq(
     mvn"com.google.dagger:hilt-android-compiler:2.57",
     mvn"androidx.hilt:hilt-compiler:1.2.0",
     mvn"com.google.dagger:hilt-compiler:2.57",
   )
 
-  // FIXME workaround for using it in resolving compiler classpaths
-  override def kotlinSymbolProcessorsResolved: T[Seq[PathRef]] = Task {
-    localResolver().classpath(
-      kotlinSymbolProcessors()
-    )
-  }
   override def mvnDeps: T[Seq[Dep]] = super.mvnDeps() ++ Seq(
     mvn"com.google.dagger:hilt-android:2.57"
   )
