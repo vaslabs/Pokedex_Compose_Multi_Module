@@ -11,6 +11,7 @@ import mill.kotlinlib.*
 
 object androidSdkModule0 extends AndroidSdkModule {
   def buildToolsVersion = "36.0.0"
+  override def cmdlineToolsVersion = "19.0"
 }
 
 object database extends AndroidHiltLib {
@@ -30,6 +31,7 @@ object database extends AndroidHiltLib {
   override def kotlinSymbolProcessors: T[Seq[Dep]] = super.kotlinSymbolProcessors() ++ Seq(
     mvn"androidx.room:room-compiler:2.7.2"
   )
+
 }
 
 object network extends AndroidHiltLib {
@@ -40,10 +42,7 @@ object network extends AndroidHiltLib {
   override def mvnDeps: T[Seq[Dep]] = super.mvnDeps() ++ Seq(
     mvn"com.squareup.retrofit2:retrofit:3.0.0",
     mvn"com.squareup.retrofit2:converter-gson:3.0.0",
-    mvn"com.squareup.okhttp3:okhttp:5.1.0",
-    mvn"com.google.code.gson:gson:2.13.1",
-    mvn"org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2",
-    mvn"org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2",
+    mvn"com.squareup.okhttp3:okhttp:5.1.0"
   )
 }
 
@@ -77,12 +76,8 @@ object compose_ui extends AndroidHiltCompose {
     mvn"androidx.navigation:navigation-runtime:2.9.2",
     mvn"androidx.lifecycle:lifecycle-viewmodel-compose:2.9.2",
     mvn"androidx.lifecycle:lifecycle-viewmodel-ktx:2.9.2",
-    mvn"org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2",
-    mvn"org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2",
     mvn"io.coil-kt:coil-compose:2.7.0",
     mvn"androidx.palette:palette-ktx:1.0.0",
-    mvn"com.google.android.material:material:1.12.0",
-
 
     // versions are resolved with compose-bom
     mvn"androidx.activity:activity-compose:1.10.1",
@@ -98,7 +93,6 @@ object compose_ui extends AndroidHiltCompose {
     mvn"androidx.compose.foundation:foundation",
     mvn"androidx.compose.foundation:foundation-layout",
     // debug
-    mvn"androidx.compose.ui:ui-tooling",
     mvn"androidx.compose.ui:ui-test-manifest"
 
   )
@@ -113,7 +107,6 @@ object navigation extends AndroidCompose {
   override def mvnDeps: T[Seq[Dep]] = super.mvnDeps() ++ Seq(
     mvn"androidx.core:core-ktx:1.16.0",
     mvn"androidx.appcompat:appcompat:1.7.1",
-    mvn"com.google.android.material:material:1.12.0",
     mvn"androidx.navigation:navigation-compose:2.9.3",
     mvn"org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0"
   )
@@ -134,9 +127,6 @@ object navigation extends AndroidCompose {
 }
 
 object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompose {
-
-  // FIXME known issue
-  def androidR8Args = Seq("--map-diagnostics", "error", "warning")
 
   override def moduleDeps: Seq[JavaModule] = super.moduleDeps ++ Seq(navigation)
 
@@ -226,10 +216,6 @@ object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompos
   def androidApplicationId = "com.nicos.pokedex_compose_multi_module"
 
   def androidSdkModule = mill.api.ModuleRef(androidSdkModule0)
-
-  def androidCompileSdk = Versions.androidCompileSdk
-
-  def androidMinSdk = Versions.androidMinSdk
 
   def androidEnableCompose = true
 
