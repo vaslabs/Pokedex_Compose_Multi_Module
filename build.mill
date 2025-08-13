@@ -84,9 +84,9 @@ object compose_ui extends AndroidHiltCompose {
     mvn"androidx.lifecycle:lifecycle-viewmodel-ktx:2.9.2",
     mvn"io.coil-kt:coil-compose:2.7.0",
     mvn"androidx.palette:palette-ktx:1.0.0",
+    mvn"androidx.activity:activity-compose:1.10.1",
 
     // versions are resolved with compose-bom
-    mvn"androidx.activity:activity-compose:1.10.1",
     mvn"androidx.compose.animation:animation",
     mvn"androidx.compose.material3:material3",
     mvn"androidx.compose.material:material",
@@ -97,10 +97,7 @@ object compose_ui extends AndroidHiltCompose {
     mvn"androidx.compose.ui:ui-text",
     mvn"androidx.compose.ui:ui-graphics",
     mvn"androidx.compose.foundation:foundation",
-    mvn"androidx.compose.foundation:foundation-layout",
-    // debug
-    mvn"androidx.compose.ui:ui-test-manifest"
-
+    mvn"androidx.compose.foundation:foundation-layout"
   )
 
   object test extends AndroidKotlinTestModule with TestModule.Junit4
@@ -124,7 +121,6 @@ object navigation extends AndroidCompose {
 
   object test extends AndroidKotlinTestModule with TestModule.Junit4
 
-
 }
 
 object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompose {
@@ -139,12 +135,15 @@ object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompos
     AndroidBuildTypeSettings(
       isMinifyEnabled = true,
       isShrinkEnabled = true
-    ).withDefaultProguardFile("proguard-android-optimize.txt")
-      .withProguardLocalFiles(
-        Seq(
-          moduleDir / "proguard-rules.pro"
-        )
-      )
+    )
+  }
+
+  override def androidProjectProguardFiles: T[Seq[PathRef]] = Task.Sources(
+    "proguard-rules.pro"
+  )
+
+  override def androidDefaultProguardFileNames: Task[Seq[String]] = Task.Anon {
+    Seq("proguard-android-optimize.txt")
   }
 
   def androidApplicationNamespace = "com.nicos.pokedex_compose_multi_module"
