@@ -10,6 +10,7 @@ import mill.javalib.TestModule.Junit4
 import mill.javalib.publish.PomSettings
 import mill.javalib.{CoursierModule, JavaModule}
 import mill.kotlinlib.*
+import ksp.KspModuleMode
 
 object androidSdkModule0 extends AndroidSdkModule {
   def buildToolsVersion = "36.0.0"
@@ -128,15 +129,30 @@ object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompos
   override def moduleDeps: Seq[JavaModule] = super.moduleDeps ++ Seq(navigation)
 
   override def androidAaptOptions: T[Seq[String]] = super.androidAaptOptions() ++ Seq(
-    "--no-version-vectors"
+    "--no-version-vectors", "--non-final-ids"
   )
+
+  def androidReleaseKeyName: Option[String] = Some("releaseKey.jks")
+
+  def androidReleaseKeyAlias: T[Option[String]] = Task {
+    Some("releaseKey")
+  }
+
+  def androidReleaseKeyPass: T[Option[String]] = Task {
+    Some("MillBuildTool")
+  }
+
+  def androidReleaseKeyStorePass: T[Option[String]] = Task {
+    Some("MillBuildTool")
+  }
 
   def androidDebugSettings: T[AndroidBuildTypeSettings] = Task {
     AndroidBuildTypeSettings(
       isMinifyEnabled = true,
-      isShrinkEnabled = true
     )
   }
+  
+  override def androidNonTransitiveRClass = false
 
   override def androidProjectProguardFiles: T[Seq[PathRef]] = Task.Sources(
     "proguard-rules.pro"
@@ -208,7 +224,7 @@ trait AndroidCompose extends AndroidKotlinLib {
 
 trait AndroidHiltLib extends AndroidKotlinLib with AndroidHiltSupport {
   override def kspVersion: T[String] = Versions.kspVersion
-  override def kotlinLanguageVersion: T[String] = Versions.kotlinLanguageVersion
+  override def kspJvmTarget: T[String] = "17"
 
   def kotlinSymbolProcessors: T[Seq[Dep]] = super[AndroidHiltSupport].kotlinSymbolProcessors() ++ Seq(
     mvn"com.google.dagger:hilt-android-compiler:2.57",
@@ -218,10 +234,6 @@ trait AndroidHiltLib extends AndroidKotlinLib with AndroidHiltSupport {
 
   override def mvnDeps: T[Seq[Dep]] = super.mvnDeps() ++ Seq(
     mvn"com.google.dagger:hilt-android:2.57"
-  )
-
-  override def kspKotlincOptions: T[Seq[String]] = super.kspKotlincOptions() ++ Seq(
-    "-Xannotation-default-target=param-property"
   )
 
 }
@@ -235,7 +247,6 @@ trait AndroidHiltCompose extends AndroidHiltLib with AndroidCompose {
 
 object Versions {
   val kotlinVersion = "2.2.0"
-  val kotlinLanguageVersion = "1.9"
 
   val kspVersion = "2.0.2"
   val androidCompileSdk = 36
