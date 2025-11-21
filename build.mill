@@ -54,7 +54,7 @@ object network extends AndroidHiltLib {
 }
 
 object compose_ui extends AndroidHiltCompose {
-  override def moduleDeps: Seq[JavaModule] = super.moduleDeps ++ Seq(network)
+  override def moduleDeps: Seq[JavaModule] = super.moduleDeps ++ Seq(database, network)
 
   override def repositoriesTask: Task[Seq[Repository]] = Task.Anon {
     super.repositoriesTask() ++
@@ -106,7 +106,7 @@ object compose_ui extends AndroidHiltCompose {
 }
 
 object navigation extends AndroidCompose {
-  override def moduleDeps: Seq[JavaModule] = super.moduleDeps ++ Seq(compose_ui)
+  override def moduleDeps: Seq[JavaModule] = super.moduleDeps ++ Seq(database, compose_ui)
   override def androidNamespace: String = "com.nicos.navigation"
 
   override def mvnDeps: T[Seq[Dep]] = super.mvnDeps() ++ Seq(
@@ -124,33 +124,14 @@ object navigation extends AndroidCompose {
 
 }
 
+
 object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompose {
 
-  override def moduleDeps: Seq[JavaModule] = super.moduleDeps ++ Seq(navigation, compose_ui)
+  override def moduleDeps: Seq[JavaModule] = super.moduleDeps ++ Seq(network, navigation, database, compose_ui)
 
   override def androidAaptOptions: T[Seq[String]] = super.androidAaptOptions() ++ Seq(
     "--no-version-vectors", "--non-final-ids"
   )
-
-  def androidReleaseKeyName: Option[String] = Some("releaseKey.jks")
-
-  def androidReleaseKeyAlias: T[Option[String]] = Task {
-    Some("releaseKey")
-  }
-
-  def androidReleaseKeyPass: T[Option[String]] = Task {
-    Some("MillBuildTool")
-  }
-
-  def androidReleaseKeyStorePass: T[Option[String]] = Task {
-    Some("MillBuildTool")
-  }
-
-  def androidDebugSettings: T[AndroidBuildTypeSettings] = Task {
-    AndroidBuildTypeSettings(
-      isMinifyEnabled = true,
-    )
-  }
 
   override def androidProjectProguardFiles: T[Seq[PathRef]] = Task.Sources(
     "proguard-rules.pro"
@@ -167,7 +148,30 @@ object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompos
 
   def androidEnableCompose = true
 
-  def androidIsDebug = true
+  /**
+   * Configuration for ReleaseKey
+   * WARNING: Replace these default values with secure and private credentials before using in production.
+   * Never use these defaults in a production environment as they are not secure.
+   * This is just for testing purposes.
+   */
+  object release extends AndroidHiltCompose, AndroidKotlinReleaseModule, AndroidR8ReleaseModule {
+
+    def androidReleaseKeyName: Option[String] = Some("releaseKey.jks")
+
+    def androidReleaseKeyAlias: T[Option[String]] = Task {
+      Some("releaseKey")
+    }
+
+    def androidReleaseKeyPass: T[Option[String]] = Task {
+      Some("MillBuildTool")
+    }
+
+    def androidReleaseKeyStorePass: T[Option[String]] = Task {
+      Some("MillBuildTool")
+    }
+
+    override def androidEmulatorPort = "5654"
+  }
 
   override def bomMvnDeps: T[Seq[Dep]] = Seq(
     mvn"androidx.compose:compose-bom:2025.07.00"
