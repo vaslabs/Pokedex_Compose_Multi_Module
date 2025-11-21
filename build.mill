@@ -124,9 +124,14 @@ object navigation extends AndroidCompose {
 
 }
 
+object app extends Cross[BaseApp]("debug", "release")
 
-object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompose {
-
+trait BaseApp extends AndroidHiltCompose, AndroidAppKotlinModule, AndroidR8AppModule, Cross.Module[String] {
+  
+  override def androidIsDebug = Task {
+    crossValue == "debug"
+  }
+  
   override def moduleDeps: Seq[JavaModule] = super.moduleDeps ++ Seq(network, navigation, database, compose_ui)
 
   override def androidAaptOptions: T[Seq[String]] = super.androidAaptOptions() ++ Seq(
@@ -148,29 +153,19 @@ object app extends AndroidAppKotlinModule, AndroidR8AppModule, AndroidHiltCompos
 
   def androidEnableCompose = true
 
-  /**
-   * Configuration for ReleaseKey
-   * WARNING: Replace these default values with secure and private credentials before using in production.
-   * Never use these defaults in a production environment as they are not secure.
-   * This is just for testing purposes.
-   */
-  object release extends AndroidHiltCompose, AndroidKotlinReleaseModule, AndroidR8ReleaseModule {
 
-    def androidReleaseKeyName: Option[String] = Some("releaseKey.jks")
+  def androidReleaseKeyName: Option[String] = Some("releaseKey.jks")
 
-    def androidReleaseKeyAlias: T[Option[String]] = Task {
-      Some("releaseKey")
-    }
+  def androidReleaseKeyAlias: T[Option[String]] = Task {
+    Some("releaseKey")
+  }
 
-    def androidReleaseKeyPass: T[Option[String]] = Task {
-      Some("MillBuildTool")
-    }
+  def androidReleaseKeyPass: T[Option[String]] = Task {
+    Some("MillBuildTool")
+  }
 
-    def androidReleaseKeyStorePass: T[Option[String]] = Task {
-      Some("MillBuildTool")
-    }
-
-    override def androidEmulatorPort = "5654"
+  def androidReleaseKeyStorePass: T[Option[String]] = Task {
+    Some("MillBuildTool")
   }
 
   override def bomMvnDeps: T[Seq[Dep]] = Seq(
